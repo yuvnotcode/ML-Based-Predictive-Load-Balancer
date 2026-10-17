@@ -29,6 +29,12 @@ public class LoadBalancerController {
         this.serverSelectionService = serverSelectionService;
     }
 
+//    Round robin algo mapping
+    @GetMapping("/servers/round-robin")
+    public ServerInfo roundRobinServer() {
+        return serverSelectionService.selectRoundRobin(servers());
+    }
+
     @GetMapping("/servers")
     public List<ServerInfo> servers() {
         // Simulated metrics for API-contract testing. Replace with collected measurements.

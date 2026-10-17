@@ -8,9 +8,11 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class ServerSelectionService {
+    private final AtomicInteger roundRobinCounter = new AtomicInteger(0);
 
     public ServerSelectionResponse selectBest(List<ServerInfo> servers) {
 
@@ -61,6 +63,30 @@ public class ServerSelectionService {
                         "LOWEST_WEIGHTED_LOAD"
                 ))
                 .orElseThrow();
+    }
+    public ServerInfo selectRoundRobin(List<ServerInfo> servers) {
+
+        // 1. Keep only healthy servers.
+        List<ServerInfo> healthyServers = servers.stream()
+                .filter(server ->
+                        "HEALTHY".equalsIgnoreCase(server.status()))
+                .toList();
+
+        // 2. Fail if no healthy server exists.
+        if (healthyServers.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "No healthy servers are available"
+            );
+        }
+
+        // 3. Select the next server in the sequence.
+        int index = Math.floorMod(
+                roundRobinCounter.getAndIncrement(),
+                healthyServers.size()
+        );
+
+        return healthyServers.get(index);
     }
 
     private record ScoredServer(ServerInfo server, double score) {
