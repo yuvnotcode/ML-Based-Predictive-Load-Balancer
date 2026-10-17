@@ -11,14 +11,22 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.yuva.loadbalancer.model.ServerSelectionResponse;
+import com.yuva.loadbalancer.service.ServerSelectionService;
 
 @RestController
 @RequestMapping("/api")
 public class LoadBalancerController {
     private final MlClient mlClient;
 
-    public LoadBalancerController(MlClient mlClient) {
+    private final ServerSelectionService serverSelectionService;
+
+    public LoadBalancerController(
+            MlClient mlClient,
+            ServerSelectionService serverSelectionService
+    ) {
         this.mlClient = mlClient;
+        this.serverSelectionService = serverSelectionService;
     }
 
     @GetMapping("/servers")
@@ -29,6 +37,10 @@ public class LoadBalancerController {
                 new ServerInfo("server-b", "http://localhost:9002", "HEALTHY", 61, 53, 37),
                 new ServerInfo("server-c", "http://localhost:9003", "HEALTHY", 74, 68, 49)
         );
+    }
+    @GetMapping("/servers/recommended")
+    public ServerSelectionResponse recommendedServer() {
+        return serverSelectionService.selectBest(servers());
     }
 
     @GetMapping("/ml-health")
