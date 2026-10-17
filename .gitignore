@@ -1,0 +1,24 @@
+# Java
+**/target/
+*.class
+
+# Python
+**/.venv/
+**/__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
