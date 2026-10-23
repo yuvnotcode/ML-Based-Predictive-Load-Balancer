@@ -39,9 +39,12 @@ public class MetricsCollector {
     private final Map<String, Deque<Double>> cpuHistory = new HashMap<>();
     private final RestTemplate restTemplate;
     private final boolean enabled;
+    private final boolean csvLogging;
 
-    public MetricsCollector(@Value("${app.collector.enabled:true}") boolean enabled) {
+    public MetricsCollector(@Value("${app.collector.enabled:true}") boolean enabled,
+                            @Value("${app.csv-logging.enabled:true}") boolean csvLogging) {
         this.enabled = enabled;
+        this.csvLogging = csvLogging;
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(1));
@@ -55,7 +58,7 @@ public class MetricsCollector {
             cpuHistory.put(target.serverId(), new ArrayDeque<>());
         }
 
-        if (enabled) {
+        if (enabled && csvLogging) {
             prepareCsv();
         }
     }
@@ -73,7 +76,9 @@ public class MetricsCollector {
                     throw new IllegalStateException("Empty metrics response");
                 }
                 store(target, metrics);
-                appendCsv(metrics);
+                if (csvLogging) {
+                    appendCsv(metrics);
+                }
             } catch (Exception ex) {
                 markDown(target);
             }

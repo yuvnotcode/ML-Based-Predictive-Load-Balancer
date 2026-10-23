@@ -17,3 +17,6 @@ management:
 #     port: 8080
 #  error:
 #    include-message: always
+app:
+  csv-logging:
+    enabled: false
