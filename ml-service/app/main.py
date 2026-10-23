@@ -1,11 +1,25 @@
+from pathlib import Path
+
+import joblib
+import json
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from app.features import make_features
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_DIR / "models" / "cpu_forecaster.joblib"
+RESULTS_PATH = BASE_DIR / "models" / "results.json"
+SECONDS_PER_STEP = 2  # the collector reads metrics every 2 seconds
+
+# Load the trained model once, when the service starts.
+bundle = joblib.load(MODEL_PATH) if MODEL_PATH.exists() else None
+
 app = FastAPI(
     title="Predictive Load Balancer ML Service",
-    version="0.1.0",
-    description="Separate Python prediction API. Current predictor is a temporary trend baseline, not the final trained model.",
+    version="0.2.0",
+    description="Predicts a server's CPU load a few seconds ahead using a trained model.",
 )
 
 
@@ -33,15 +47,25 @@ class PredictionResponse(CamelModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "UP", "service": "ml-service"}
+    return {
+        "status": "UP",
+        "service": "ml-service",
+        "model": bundle["model_name"] if bundle else "baseline (no trained model found)",
+    }
 
 
-@app.post("/predict", response_model=PredictionResponse)
-def predict(request: PredictionRequest) -> PredictionResponse:
-    """Temporary trend extrapolation baseline; replace with a trained model next."""
+@app.get("/model-info")
+def model_info() -> dict:
+    if not RESULTS_PATH.exists():
+        return {"model": None, "message": "No training results found. Run train.py."}
+    return json.loads(RESULTS_PATH.read_text())
+
+
+def baseline_predict(request: PredictionRequest) -> float:
+    """Old trend extrapolation. Only used if no trained model file exists."""
     history = request.recent_cpu_percent
-    x = list(range(len(history)))
     n = len(history)
+    x = list(range(n))
     mean_x = sum(x) / n
     mean_y = sum(history) / n
     denominator = sum((xi - mean_x) ** 2 for xi in x)
@@ -49,19 +73,35 @@ def predict(request: PredictionRequest) -> PredictionResponse:
         sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, history)) / denominator
         if denominator else 0.0
     )
-    projected_cpu = history[-1] + slope * 3
-    projected_load = (
-            0.75 * projected_cpu
-            + 0.15 * request.memory_percent
-            + 0.10 * min(request.requests_per_second, 100)
-    )
-    projected_load = min(100.0, max(0.0, projected_load))
+    return history[-1] + slope * 3
+
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(request: PredictionRequest) -> PredictionResponse:
+    if bundle:
+        features = make_features(
+            request.cpu_percent,
+            request.memory_percent,
+            request.requests_per_second,
+            request.recent_cpu_percent,
+        )
+        predicted = float(bundle["model"].predict([features])[0])
+        horizon_seconds = bundle["horizon_steps"] * SECONDS_PER_STEP
+        version = f"{bundle['model_name']}-v1"
+        method = f"trained-{bundle['model_name']}"
+    else:
+        predicted = baseline_predict(request)
+        horizon_seconds = 3
+        version = "baseline-0.1"
+        method = "linear-trend-baseline-not-trained-ml"
+
+    predicted = min(100.0, max(0.0, predicted))
 
     return PredictionResponse(
         server_id=request.server_id,
         current_load_percent=round(request.cpu_percent, 2),
-        predicted_load_percent=round(projected_load, 2),
-        prediction_horizon_seconds=3,
-        model_version="baseline-0.1",
-        method="linear-trend-baseline-not-trained-ml",
+        predicted_load_percent=round(predicted, 2),
+        prediction_horizon_seconds=horizon_seconds,
+        model_version=version,
+        method=method,
     )
