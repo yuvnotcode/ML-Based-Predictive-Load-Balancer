@@ -253,8 +253,3 @@ How to read this:
 - The training load is synthetic and mostly idle with bursts to full CPU.
 - Each predictive request currently makes one ML call per server, which adds latency.
 
-## Team
-
-- Yuvaditya Verma
-- _Add the other team members here_
-- Supervisor: _add name here_
