@@ -1,0 +1,27 @@
+{
+  "train_rows": 9135,
+  "test_rows": 2279,
+  "best_model": "gradient_boosting",
+  "results": {
+    "baseline_persistence": {
+      "mae": 3.215,
+      "rmse": 9.61
+    },
+    "baseline_linear_trend": {
+      "mae": 4.393,
+      "rmse": 12.682
+    },
+    "ridge": {
+      "mae": 2.991,
+      "rmse": 7.021
+    },
+    "random_forest": {
+      "mae": 3.272,
+      "rmse": 7.148
+    },
+    "gradient_boosting": {
+      "mae": 3.184,
+      "rmse": 6.938
+    }
+  }
+}

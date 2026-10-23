@@ -17,6 +17,8 @@ import com.yuva.loadbalancer.model.BackendResponse;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.yuva.loadbalancer.service.MetricsCollector;
 
 @RestController
 @RequestMapping("/api")
@@ -25,16 +27,19 @@ public class LoadBalancerController {
 
     private final ServerSelectionService serverSelectionService;
 
+    private final MetricsCollector metricsCollector;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     public LoadBalancerController(
             MlClient mlClient,
-            ServerSelectionService serverSelectionService
+            ServerSelectionService serverSelectionService,
+            MetricsCollector metricsCollector
     ) {
         this.mlClient = mlClient;
         this.serverSelectionService = serverSelectionService;
+        this.metricsCollector = metricsCollector;
     }
-
 //    Round robin algo mapping
     @GetMapping("/servers/round-robin")
     public ServerInfo roundRobinServer() {
@@ -43,21 +48,53 @@ public class LoadBalancerController {
 
     @GetMapping("/servers")
     public List<ServerInfo> servers() {
-        // Simulated metrics for API-contract testing. Replace with collected measurements.
-        return List.of(
-                new ServerInfo("server-a", "http://localhost:9001", "HEALTHY", 38, 45, 22),
-                new ServerInfo("server-b", "http://localhost:9002", "HEALTHY", 61, 53, 37),
-                new ServerInfo("server-c", "http://localhost:9003", "HEALTHY", 74, 68, 49)
-        );
+        return metricsCollector.getServers();
     }
+
     @GetMapping("/servers/recommended")
     public ServerSelectionResponse recommendedServer() {
         return serverSelectionService.selectBest(servers());
     }
 
-    @GetMapping("/ml-health")
-    public String mlHealth() {
-        return mlClient.health();
+
+@GetMapping("/ml-health")
+public JsonNode mlHealth() {
+    return mlClient.health();
+}
+
+    @GetMapping("/route/predictive")
+    public BackendResponse predictiveRouteRequest() {
+        ServerSelectionResponse selection =
+                serverSelectionService.selectBestPredicted(servers());
+
+        ServerInfo selectedServer = selection.selectedServer();
+
+        String backendUrl =
+                selectedServer.baseUrl() + "/backend/info";
+
+        try {
+            BackendResponse response = restTemplate.getForObject(
+                    backendUrl,
+                    BackendResponse.class
+            );
+
+            if (response == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Backend returned an empty response"
+                );
+            }
+
+            return response;
+
+        } catch (org.springframework.web.client.RestClientException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Failed to communicate with backend: "
+                            + selectedServer.serverId(),
+                    ex
+            );
+        }
     }
 
     @PostMapping("/predictions")

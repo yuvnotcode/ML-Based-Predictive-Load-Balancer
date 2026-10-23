@@ -22,3 +22,5 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+control-service/data/metrics_backup.csv

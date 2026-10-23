@@ -1,9 +1,12 @@
 package com.yuva.loadbalancer.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.yuva.loadbalancer.model.PredictionRequest;
 import com.yuva.loadbalancer.model.PredictionResponse;
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -12,7 +15,15 @@ public class MlClient {
     private final RestClient restClient;
 
     public MlClient(@Value("${ml-service.base-url}") String baseUrl) {
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        // Plain HTTP/1.1 client (no HTTP/2 upgrade) so Uvicorn accepts the request body.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(2));
+        factory.setReadTimeout(Duration.ofSeconds(5));
+
+        this.restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(factory)
+                .build();
     }
 
     public PredictionResponse predict(PredictionRequest request) {
@@ -24,7 +35,10 @@ public class MlClient {
                 .body(PredictionResponse.class);
     }
 
-    public String health() {
-        return restClient.get().uri("/health").retrieve().body(String.class);
+    public JsonNode health() {
+        return restClient.get()
+                .uri("/health")
+                .retrieve()
+                .body(JsonNode.class);
     }
 }
