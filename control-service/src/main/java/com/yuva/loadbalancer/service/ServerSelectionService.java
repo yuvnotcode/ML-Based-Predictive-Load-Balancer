@@ -1,7 +1,5 @@
 package com.yuva.loadbalancer.service;
 
-import com.yuva.loadbalancer.model.PredictionRequest;
-import com.yuva.loadbalancer.model.PredictionResponse;
 import com.yuva.loadbalancer.model.ServerInfo;
 import com.yuva.loadbalancer.model.ServerSelectionResponse;
 import java.util.ArrayList;
@@ -14,13 +12,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ServerSelectionService {
-    private final MlClient mlClient;
     private final MetricsCollector metricsCollector;
 
     private final AtomicInteger roundRobinCounter = new AtomicInteger(0);
 
-    public ServerSelectionService(MlClient mlClient, MetricsCollector metricsCollector) {
-        this.mlClient = mlClient;
+    public ServerSelectionService(MetricsCollector metricsCollector) {
         this.metricsCollector = metricsCollector;
     }
 
@@ -76,48 +72,32 @@ public class ServerSelectionService {
     public ServerSelectionResponse selectBestPredicted(List<ServerInfo> servers) {
         List<ServerInfo> healthyServers = healthyOnly(servers);
 
-        try {
-            return healthyServers.stream()
-                    .map(server -> {
-                        PredictionRequest request = new PredictionRequest(
-                                server.serverId(),
-                                server.cpuPercent(),
-                                server.memoryPercent(),
-                                server.requestsPerSecond(),
-                                recentCpuFor(server)
-                        );
-
-                        PredictionResponse prediction = mlClient.predict(request);
-
-                        return new ScoredServer(server, prediction.predictedLoadPercent());
-                    })
-                    .min(Comparator
-                            .comparingDouble(ScoredServer::score)
-                            .thenComparing(item -> item.server().serverId()))
-                    .map(item -> new ServerSelectionResponse(
-                            item.server(),
-                            Math.round(item.score() * 100.0) / 100.0,
-                            "PREDICTIVE_ML_BASELINE"
-                    ))
-                    .orElseThrow();
-        } catch (Exception ex) {
-            // ML service is down or failed: do not break routing, use current load instead.
-            ServerSelectionResponse fallback = selectBest(servers);
-            return new ServerSelectionResponse(
-                    fallback.selectedServer(),
-                    fallback.loadScore(),
-                    "FALLBACK_LOWEST_WEIGHTED_LOAD"
-            );
+        List<ScoredServer> scored = new ArrayList<>();
+        for (ServerInfo server : healthyServers) {
+            Double predicted = metricsCollector.getPredictedCpu(server.serverId());
+            if (predicted == null) {
+                // No fresh prediction (ML service down or not ready yet): use current load.
+                ServerSelectionResponse fallback = selectBest(servers);
+                return new ServerSelectionResponse(
+                        fallback.selectedServer(),
+                        fallback.loadScore(),
+                        "FALLBACK_LOWEST_WEIGHTED_LOAD"
+                );
+            }
+            scored.add(new ScoredServer(server, predicted));
         }
-    }
 
-    // Real recent CPU readings; the ML service needs at least 2 and at most 20.
-    private List<Double> recentCpuFor(ServerInfo server) {
-        List<Double> history = new ArrayList<>(metricsCollector.getRecentCpu(server.serverId()));
-        while (history.size() < 2) {
-            history.add(0, server.cpuPercent());
-        }
-        return history;
+        ScoredServer best = scored.stream()
+                .min(Comparator
+                        .comparingDouble(ScoredServer::score)
+                        .thenComparing(item -> item.server().serverId()))
+                .orElseThrow();
+
+        return new ServerSelectionResponse(
+                best.server(),
+                Math.round(best.score() * 100.0) / 100.0,
+                "PREDICTIVE_ML_MODEL"
+        );
     }
 
     private List<ServerInfo> healthyOnly(List<ServerInfo> servers) {

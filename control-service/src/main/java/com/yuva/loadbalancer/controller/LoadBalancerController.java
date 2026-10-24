@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.yuva.loadbalancer.service.MetricsCollector;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api")
@@ -56,6 +57,42 @@ public class LoadBalancerController {
         return serverSelectionService.selectBest(servers());
     }
 
+    @GetMapping("/servers/predicted")
+    public ServerSelectionResponse predictedServer() {
+        return serverSelectionService.selectBestPredicted(servers());
+    }
+
+    // Used by the comparison experiment: picks a server with the chosen strategy
+    // and makes it do real work.
+    @GetMapping("/route/work")
+    public BackendResponse routeWork(
+            @RequestParam(defaultValue = "roundrobin") String strategy,
+            @RequestParam(defaultValue = "100") long ms) {
+
+        ServerInfo selectedServer = switch (strategy.toLowerCase()) {
+            case "roundrobin" -> serverSelectionService.selectRoundRobin(servers());
+            case "weighted" -> serverSelectionService.selectBest(servers()).selectedServer();
+            case "predictive" -> serverSelectionService.selectBestPredicted(servers()).selectedServer();
+            default -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Unknown strategy: " + strategy);
+        };
+
+        String backendUrl = selectedServer.baseUrl() + "/backend/work?ms=" + ms + "&threads=1";
+
+        try {
+            BackendResponse response = restTemplate.getForObject(backendUrl, BackendResponse.class);
+            if (response == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY, "Backend returned an empty response");
+            }
+            return response;
+        } catch (org.springframework.web.client.RestClientException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Failed to communicate with backend: " + selectedServer.serverId(),
+                    ex);
+        }
+    }
 
 @GetMapping("/ml-health")
 public JsonNode mlHealth() {
