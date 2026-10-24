@@ -54,15 +54,39 @@ public class BackendController {
         );
     }
 
-    // Burns CPU for a while, so we can create artificial load for testing.
+    // Burns CPU for a while on several threads, so we can create realistic test load.
     @GetMapping("/backend/work")
-    public BackendResponse work(@RequestParam(defaultValue = "200") long ms) {
-        long end = System.nanoTime() + Math.min(ms, 5000) * 1_000_000L;
+    public BackendResponse work(
+            @RequestParam(defaultValue = "200") long ms,
+            @RequestParam(defaultValue = "1") int threads) {
+
+        int count = Math.max(1, Math.min(threads, Runtime.getRuntime().availableProcessors()));
+        long durationNanos = Math.min(ms, 5000) * 1_000_000L;
+
+        Thread[] workers = new Thread[count];
+        for (int i = 0; i < count; i++) {
+            workers[i] = new Thread(() -> burn(durationNanos));
+            workers[i].start();
+        }
+        for (Thread worker : workers) {
+            try {
+                worker.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        return new BackendResponse(serverId, "Worked for " + ms + " ms on " + count + " threads", port);
+    }
+
+    private static void burn(long nanos) {
+        long end = System.nanoTime() + nanos;
         double sink = 0;
         while (System.nanoTime() < end) {
             sink += Math.sqrt(sink + 1);
         }
-        return new BackendResponse(serverId, "Worked for " + ms + " ms", port);
+        if (sink < 0) {
+            System.out.println(sink);
+        }
     }
 
     private static double round(double value) {

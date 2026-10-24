@@ -214,32 +214,38 @@ This trains the models, prints the comparison table, and saves the best model by
 
 ### Results
 
-Train rows: 9,135. Test rows: 2,279.
+### Results
+
+Two datasets were collected:
+
+- **v1**: brief CPU spikes on an otherwise idle system (about 10,500 readings). Heavy load was extremely rare.
+- **v2**: sustained load that rises and falls on all three servers at once, collected with `generate-load-v2.ps1` (3,942 readings).
+
+Results on dataset v2 (3,144 training rows, 780 test rows, chronological split):
 
 | Model | MAE | RMSE |
 |---|---|---|
-| Baseline: persistence (CPU stays the same) | 3.215 | 9.610 |
-| Baseline: linear trend extrapolation | 4.393 | 12.682 |
-| Ridge regression | 2.991 | 7.021 |
-| Random forest | 3.272 | 7.148 |
-| Gradient boosting | 3.184 | 6.938 |
+| Baseline: persistence (CPU stays the same) | 2.953 | 6.457 |
+| Baseline: linear trend extrapolation | 4.300 | 7.390 |
+| Ridge regression | 3.172 | 6.312 |
+| Random forest | 4.671 | 7.379 |
+| Gradient boosting | 3.732 | 6.520 |
 
-How to read this:
+Findings:
 
-- The trained models reduce RMSE by roughly 27-28% compared with the persistence baseline, so they mainly help with large errors, such as when a burst is starting or ending.
-- Improvement in MAE is small, because most readings are idle and easy to predict for every method.
-- Simple trend extrapolation performed worse than persistence.
-- The differences between the three trained models are small and come from a single split, so gradient boosting should not be presented as clearly better than ridge regression. It was selected because it had the lowest RMSE on the test set, so its figures are slightly optimistic.
-
+- The trained models did not outperform the persistence baseline on this workload. Ridge has a marginally lower RMSE (about 2%), which is within noise for a test set of this size, and a higher MAE.
+- The load generator holds each load level for 15 to 50 seconds and then changes it by a random step. Over a 6-second horizon the CPU usually stays the same, and the timing and direction of changes are not predictable from history.
+- A model trained on dataset v1 (brief spikes) performs very poorly on v2 (MAE 19.10 compared with 3.17), which shows that forecasting quality depends heavily on the load pattern in the training data.
+- Results are specific to this synthetic workload and a single chronological split.
 ## Project status
 
-| Area | Status |
-|---|---|
-| Round-robin, weighted-load and predictive routing | Done |
-| Real metrics from backends, with health detection | Done |
-| Metrics logging to CSV | Done |
-| Training pipeline with chronological evaluation | Done |
-| Serve the trained model through the FastAPI `/predict` endpoint | In progress |
+| Area | Status  |
+|---|---------|
+| Round-robin, weighted-load and predictive routing | Done    |
+| Real metrics from backends, with health detection | Done    |
+| Metrics logging to CSV | Done    |
+| Training pipeline with chronological evaluation | Done    |
+| Serve the trained model through the FastAPI `/predict` endpoint | Done    |
 | Move predictions into the collector loop (faster routing) | Planned |
 | Load tests comparing the three strategies (latency, errors, load spread) | Planned |
 | Accuracy report on busy periods only | Planned |

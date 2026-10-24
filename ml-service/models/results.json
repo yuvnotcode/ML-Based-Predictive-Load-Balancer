@@ -1,27 +1,27 @@
 {
-  "train_rows": 9135,
-  "test_rows": 2279,
-  "best_model": "gradient_boosting",
+  "train_rows": 3144,
+  "test_rows": 780,
+  "best_model": "ridge",
   "results": {
     "baseline_persistence": {
-      "mae": 3.215,
-      "rmse": 9.61
+      "mae": 2.953,
+      "rmse": 6.457
     },
     "baseline_linear_trend": {
-      "mae": 4.393,
-      "rmse": 12.682
+      "mae": 4.3,
+      "rmse": 7.39
     },
     "ridge": {
-      "mae": 2.991,
-      "rmse": 7.021
+      "mae": 3.172,
+      "rmse": 6.312
     },
     "random_forest": {
-      "mae": 3.272,
-      "rmse": 7.148
+      "mae": 4.671,
+      "rmse": 7.379
     },
     "gradient_boosting": {
-      "mae": 3.184,
-      "rmse": 6.938
+      "mae": 3.732,
+      "rmse": 6.52
     }
   }
 }
