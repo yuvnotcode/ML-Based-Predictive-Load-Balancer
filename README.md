@@ -214,8 +214,6 @@ This trains the models, prints the comparison table, and saves the best model by
 
 ### Results
 
-### Results
-
 Two datasets were collected:
 
 - **v1**: brief CPU spikes on an otherwise idle system (about 10,500 readings). Heavy load was extremely rare.
